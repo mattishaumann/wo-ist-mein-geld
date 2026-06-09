@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wo ist mein Geld? · Scalable Capital Prototype</title>
+<style>
+  /* ============================================================
+     SCALABLE CAPITAL · DESIGN TOKENS (from project palette)
+     ============================================================ */
+  :root {
+    --sc-bg:#080808; --sc-surface:#101010; --sc-surface-2:#181818;
+    --sc-surface-3:#282830; --sc-surface-4:#404048;
+    --sc-mint:#34EBD1; --sc-mint-strong:#20E8C8; --sc-mint-tint-txt:#5FF2DE;
+    --sc-mint-ghost:#132D2C; --sc-on-mint:#042521;
+    --sc-positive:#34EBD1; --sc-negative:#DD4B43; --sc-negative-ghost:#49312F;
+    --sc-prime:#E8B53A;
+    --sc-text:#F8F8F8; --sc-text-muted:#A0A0A8; --sc-text-dim:#6A6A72;
+    --sc-border:#282828; --sc-border-soft:#1C1C1C;
+    --sc-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --sc-font-mono:ui-monospace,"SF Mono",Menlo,monospace;
+    --sc-r-pill:999px; --sc-r-lg:16px; --sc-r-md:12px; --sc-r-sm:8px;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  body {
+    font-family:var(--sc-font);
+    background:
+      radial-gradient(1200px 600px at 15% -10%, #0f1413 0%, transparent 55%),
+      radial-gradient(1000px 700px at 110% 110%, #0d1211 0%, transparent 50%),
+      #060807;
+    color:var(--sc-text);
+    min-height:100vh;
+    display:flex; flex-direction:column; align-items:center;
+    padding:32px 16px 64px;
+  }
+
+  /* ---- Stage chrome (explainer around the phone) ---- */
+  .stage-head { text-align:center; max-width:420px; margin-bottom:24px; }
+  .stage-eyebrow {
+    font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--sc-mint-tint-txt); margin-bottom:10px;
+    display:inline-flex; align-items:center; gap:7px;
+  }
+  .stage-eyebrow::before {
+    content:""; width:6px; height:6px; border-radius:50%; background:var(--sc-mint);
+    box-shadow:0 0 10px var(--sc-mint);
+  }
+  .stage-head h1 { font-size:25px; font-weight:700; letter-spacing:-.02em; line-height:1.15; }
+  .stage-head h1 em { font-style:normal; color:var(--sc-mint); }
+  .stage-head p { font-size:13.5px; color:var(--sc-text-muted); margin-top:9px; line-height:1.5; }
+
+  /* ---- Phone shell ---- */
+  .phone {
+    width:393px; height:852px; position:relative;
+    background:var(--sc-bg);
+    border-radius:46px;
+    border:1px solid #1d1d1d;
+    box-shadow:
+      0 0 0 11px #0a0a0a,
+      0 0 0 12px #232323,
+      0 40px 90px -20px rgba(0,0,0,.85),
+      0 0 70px -30px rgba(52,235,209,.18);
+    overflow:hidden;
+  }
+  @media (max-width:440px){
+    .phone{ width:100%; max-width:393px; height:auto; aspect-ratio:393/852; }
+  }
+
+  /* status bar */
+  .statusbar {
+    height:46px; display:flex; align-items:center; justify-content:space-between;
+    padding:0 26px 0 30px; font-size:14px; font-weight:600; color:var(--sc-text);
+    position:relative; z-index:5;
+  }
+  .statusbar .icons { display:flex; align-items:center; gap:6px; }
+  .statusbar svg { display:block; }
+
+  /* screen container · frames stack here */
+  .screens { position:absolute; inset:46px 0 0 0; }
+  .screen {
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    opacity:0; visibility:hidden; transform:translateX(18px);
+    transition:opacity .26s ease, transform .26s ease, visibility .26s;
+    overflow:hidden;
+  }
+  .screen.active { opacity:1; visibility:visible; transform:translateX(0); }
+  .screen.exit-left { transform:translateX(-18px); }
+
+  /* appbar */
+  .appbar {
+    height:54px; flex:0 0 54px; display:flex; align-items:center;
+    padding:0 16px; position:relative;
+  }
+  .appbar .back {
+    width:38px; height:38px; margin-left:-8px; border:none; background:transparent;
+    color:var(--sc-text); display:flex; align-items:center; justify-content:center;
+    cursor:pointer; border-radius:50%;
+  }
+  .appbar .back:active { background:var(--sc-surface-2); }
+  .appbar .title {
+    position:absolute; left:50%; transform:translateX(-50%);
+    font-size:16px; font-weight:600;
+  }
+
+  .scroll { flex:1; overflow-y:auto; padding:0 16px 28px; }
+  .scroll::-webkit-scrollbar{ width:0; }
+
+  /* generic pieces */
+  .label-muted { font-size:13px; color:var(--sc-text-muted); }
+  .micro { font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--sc-text-dim); }
+
+  .balance-row { padding:8px 4px 20px; }
+  .balance-row .amt { font-size:30px; font-weight:700; letter-spacing:-.02em; margin-top:3px; }
+
+  /* hero payout card */
+  .card {
+    background:var(--sc-surface); border:1px solid var(--sc-border);
+    border-radius:var(--sc-r-lg); padding:18px;
+  }
+  .card.hero { position:relative; overflow:hidden; }
+  .card.hero::after{
+    content:""; position:absolute; right:-40px; top:-40px; width:150px; height:150px;
+    background:radial-gradient(circle, rgba(52,235,209,.10), transparent 70%);
+    pointer-events:none;
+  }
+  .pill {
+    display:inline-flex; align-items:center; gap:6px;
+    background:var(--sc-mint-ghost); color:var(--sc-mint-tint-txt);
+    font-size:12px; font-weight:600; padding:5px 11px; border-radius:var(--sc-r-pill);
+  }
+  .pill .dot { width:7px;height:7px;border-radius:50%;background:var(--sc-mint); animation:pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
+
+  .hero-top { display:flex; align-items:center; justify-content:space-between; }
+  .hero-clock { color:var(--sc-text-dim); }
+  .hero-title { font-size:14px; color:var(--sc-text); margin-top:16px; }
+  .hero-amt { font-size:30px; font-weight:700; letter-spacing:-.02em; margin-top:4px; }
+  .hero-detail { font-size:13px; color:var(--sc-text-muted); margin-top:14px; line-height:1.55; }
+  .hero-detail b { color:var(--sc-text); font-weight:500; }
+  .hero-eta { color:var(--sc-mint-tint-txt); font-weight:600; }
+
+  .btn {
+    width:100%; border:none; border-radius:var(--sc-r-lg);
+    padding:15px 20px; font-family:var(--sc-font); font-size:15px; font-weight:600;
+    cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;
+    transition:filter .15s, transform .05s;
+  }
+  .btn:active { transform:scale(.985); }
+  .btn--primary { background:var(--sc-mint); color:var(--sc-on-mint); }
+  .btn--primary:hover { filter:brightness(1.06); }
+  .btn--secondary { background:var(--sc-mint-ghost); color:var(--sc-mint-tint-txt); }
+  .btn--secondary:hover { filter:brightness(1.18); }
+  .card .btn { margin-top:18px; }
+
+  /* history row */
+  .history { margin-top:14px; }
+  .row {
+    background:var(--sc-surface-2); border-radius:var(--sc-r-md);
+    padding:14px 16px; display:flex; align-items:center; gap:13px;
+  }
+  .row .check {
+    width:26px;height:26px;border-radius:50%;background:var(--sc-mint-ghost);
+    display:flex;align-items:center;justify-content:center;flex:0 0 26px;
+  }
+  .row .rtext { flex:1; }
+  .row .rtext .t { font-size:13.5px; }
+  .row .rtext .s { font-size:12px; color:var(--sc-text-dim); margin-top:2px; }
+
+  .section-label { margin:22px 4px 11px; }
+
+  /* summary header on timeline */
+  .summary { padding:6px 4px 22px; }
+  .summary .big { font-size:15px; }
+  .summary .sub { font-size:13px; color:var(--sc-text-muted); margin-top:5px; }
+  .summary .sub .eta { color:var(--sc-mint-tint-txt); font-weight:600; }
+
+  /* timeline */
+  .timeline { padding:0 4px; }
+  .tstep { display:flex; gap:15px; }
+  .tstep .gutter { display:flex; flex-direction:column; align-items:center; flex:0 0 26px; }
+  .tnode {
+    width:26px; height:26px; border-radius:50%; flex:0 0 26px;
+    display:flex; align-items:center; justify-content:center; z-index:2;
+  }
+  .tnode.done { background:var(--sc-mint); }
+  .tnode.active { background:transparent; border:2.5px solid var(--sc-mint); position:relative; }
+  .tnode.active .inner { width:9px;height:9px;border-radius:50%;background:var(--sc-mint); animation:pulse 1.8s ease-in-out infinite; }
+  .tnode.pending { background:var(--sc-surface-4); }
+  .connector { width:2px; flex:1; min-height:26px; }
+  .connector.done { background:var(--sc-mint); }
+  .connector.pending { background:var(--sc-border); }
+  .tbody { padding-bottom:26px; flex:1; }
+  .tstep:last-child .tbody { padding-bottom:6px; }
+  .tbody .tt { font-size:14.5px; }
+  .tbody .tt.is-active { font-weight:700; }
+  .tbody .tt.is-pending { color:var(--sc-text-dim); }
+  .tbody .tsub { font-size:12.5px; color:var(--sc-text-dim); margin-top:4px; line-height:1.5; }
+  .tbody .tsub.mint { color:var(--sc-mint-tint-txt); }
+  .tbody .more {
+    display:inline-block; margin-top:9px; font-size:13px; font-weight:600;
+    color:var(--sc-mint-tint-txt); cursor:pointer; padding:4px 0;
+  }
+  .tbody .more:active { opacity:.6; }
+
+  .timeline-foot { padding:14px 4px 4px; }
+  .eta-exceeded-link {
+    display:block; text-align:center; margin-top:18px; font-size:12.5px;
+    color:var(--sc-text-dim); cursor:pointer; text-decoration:underline; text-underline-offset:3px;
+  }
+  .eta-exceeded-link:active { color:var(--sc-text-muted); }
+
+  /* settlement (frame 3) */
+  .info-card {
+    background:var(--sc-surface-3); border-radius:var(--sc-r-lg); padding:18px;
+    display:flex; gap:13px;
+  }
+  .info-card .ico {
+    width:30px;height:30px;border-radius:50%;background:var(--sc-mint-ghost);
+    display:flex;align-items:center;justify-content:center;flex:0 0 30px;
+  }
+  .info-card .it { font-size:14.5px; line-height:1.4; }
+  .info-card .ix { font-size:13px; color:var(--sc-text-muted); margin-top:8px; line-height:1.6; }
+
+  .breakdown { margin-top:16px; display:flex; flex-direction:column; gap:8px; }
+  .brow {
+    background:var(--sc-surface-2); border-radius:var(--sc-r-md);
+    padding:15px 16px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .brow .bl { font-size:13.5px; color:var(--sc-text-muted); }
+  .brow .br { text-align:right; }
+  .brow .br .v { font-size:15px; font-weight:600; }
+  .brow .br .vs { font-size:11.5px; color:var(--sc-mint-tint-txt); font-weight:600; margin-top:2px; }
+  .reassure { font-size:12.5px; color:var(--sc-text-muted); margin:16px 4px; line-height:1.6; }
+
+  /* bottom sheet (frame 4) */
+  .scrim {
+    position:absolute; inset:0; background:rgba(0,0,0,.62);
+    opacity:0; visibility:hidden; transition:opacity .28s, visibility .28s; z-index:40;
+  }
+  .scrim.show { opacity:1; visibility:visible; }
+  .sheet {
+    position:absolute; left:0; right:0; bottom:0; z-index:41;
+    background:var(--sc-surface-3);
+    border-radius:22px 22px 0 0; padding:12px 18px 26px;
+    transform:translateY(102%); transition:transform .32s cubic-bezier(.32,.72,0,1);
+    max-height:78%; overflow-y:auto;
+  }
+  .sheet.show { transform:translateY(0); }
+  .sheet::-webkit-scrollbar{ width:0; }
+  .grab { width:38px;height:4px;border-radius:99px;background:var(--sc-surface-4); margin:4px auto 16px; }
+  .sheet-head { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:6px; }
+  .sheet-head h2 { font-size:20px; font-weight:600; }
+  .sheet-head .x { background:transparent;border:none;color:var(--sc-text-muted);cursor:pointer;padding:4px;margin:-4px; }
+  .reason { padding:18px 0; border-bottom:1px solid var(--sc-border); }
+  .reason:last-of-type { border-bottom:none; }
+  .reason .rt { font-size:14.5px; font-weight:600; display:flex; align-items:center; gap:9px; }
+  .reason .rt .rdot { width:7px;height:7px;border-radius:50%;background:var(--sc-mint); flex:0 0 7px; }
+  .reason .rx { font-size:13px; color:var(--sc-text-muted); margin-top:8px; line-height:1.6; padding-left:16px; }
+  .disclaimer { font-size:11.5px; color:var(--sc-text-dim); line-height:1.5; margin:18px 0 18px; padding-left:0; }
+
+  /* frame 5 · completed / exceeded */
+  .center-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 28px 40px; text-align:center; }
+  .big-check {
+    width:84px;height:84px;border-radius:50%;background:var(--sc-mint-ghost);
+    display:flex;align-items:center;justify-content:center; margin-bottom:24px;
+    animation:popin .5s cubic-bezier(.2,1.4,.4,1);
+  }
+  @keyframes popin{ 0%{transform:scale(.3);opacity:0} 100%{transform:scale(1);opacity:1} }
+  .center-state h2 { font-size:21px; font-weight:600; }
+  .center-state .cs-sub { font-size:14px; color:var(--sc-text-muted); margin-top:10px; line-height:1.5; }
+  .center-state .cs-thanks { font-size:13px; color:var(--sc-text-dim); margin-top:18px; }
+  .center-state .btn { margin-top:34px; max-width:280px; }
+
+  .exceeded-dot {
+    width:64px;height:64px;border-radius:50%;
+    background:var(--sc-negative-ghost);
+    display:flex;align-items:center;justify-content:center;margin-bottom:22px;
+  }
+  .support-card {
+    background:var(--sc-surface-2); border-radius:var(--sc-r-md);
+    padding:16px; width:100%; text-align:left; margin-top:22px;
+  }
+  .support-card .scl { font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--sc-text-dim); margin-bottom:10px; }
+  .support-card .sline { display:flex; justify-content:space-between; padding:7px 0; font-size:13px; border-bottom:1px solid var(--sc-border-soft); }
+  .support-card .sline:last-child{ border-bottom:none; }
+  .support-card .sline .k { color:var(--sc-text-muted); }
+  .support-card .sline .v { color:var(--sc-text); font-family:var(--sc-font-mono); font-size:12.5px; }
+
+  /* toast */
+  .toast {
+    position:absolute; bottom:30px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--sc-surface-4); color:var(--sc-text); font-size:13px; font-weight:500;
+    padding:13px 20px; border-radius:var(--sc-r-pill); z-index:60;
+    opacity:0; visibility:hidden; transition:opacity .25s, transform .25s, visibility .25s;
+    white-space:nowrap; box-shadow:0 8px 30px rgba(0,0,0,.5);
+  }
+  .toast.show { opacity:1; visibility:visible; transform:translateX(-50%) translateY(0); }
+
+  /* tiny prototype hint chrome */
+  .hint {
+    margin-top:22px; font-size:12px; color:var(--sc-text-dim); text-align:center;
+    max-width:393px; line-height:1.5;
+  }
+  .hint kbd {
+    font-family:var(--sc-font-mono); font-size:11px; background:var(--sc-surface-2);
+    border:1px solid var(--sc-border); border-radius:5px; padding:1px 6px; color:var(--sc-text-muted);
+  }
+  .footer-note {
+    margin-top:14px; font-size:11px; color:var(--sc-text-dim); text-align:center; max-width:393px; line-height:1.6;
+  }
+
+  /* ---- submission case chrome (motivation, evidence, metrics) ---- */
+  .case { width:100%; max-width:560px; margin:0 auto 32px; display:flex; flex-direction:column; gap:14px; }
+  .cblock {
+    background:rgba(16,16,16,.72); border:1px solid var(--sc-border-soft);
+    border-radius:var(--sc-r-lg); padding:19px 21px; backdrop-filter:blur(4px);
+  }
+  .cnum { font-size:11px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--sc-mint-tint-txt); margin-bottom:11px; }
+  .cblock p { font-size:13.5px; color:var(--sc-text-muted); line-height:1.62; }
+  .cblock p + p { margin-top:10px; }
+  .cblock p b { color:var(--sc-text); font-weight:600; }
+
+  .method { display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin-bottom:13px; }
+  .mpill {
+    font-size:11.5px; font-weight:600; color:var(--sc-text-muted);
+    background:var(--sc-surface-2); border:1px solid var(--sc-border-soft);
+    padding:5px 11px; border-radius:var(--sc-r-pill);
+  }
+  .marrow { color:var(--sc-text-dim); font-size:12px; }
+
+  .chart { display:flex; flex-direction:column; gap:8px; margin:2px 0 11px; }
+  .crow { display:grid; grid-template-columns:138px 1fr 24px; align-items:center; gap:10px; }
+  .crow .cl { font-size:11.5px; color:var(--sc-text-muted); line-height:1.25; }
+  .crow .ct { height:10px; }
+  .cbar { height:10px; border-radius:99px; background:#33333a; }
+  .cbar.mint { background:var(--sc-mint); box-shadow:0 0 12px rgba(52,235,209,.3); }
+  .crow .cv { font-size:11px; color:var(--sc-text-dim); font-family:var(--sc-font-mono); text-align:right; }
+  .cap { font-size:11px; color:var(--sc-text-dim); line-height:1.55; margin-bottom:11px; }
+  .cap b { color:var(--sc-mint-tint-txt); font-weight:600; }
+
+  .q { border-left:2px solid var(--sc-mint); padding:2px 0 2px 13px; margin-top:12px; }
+  .q .qt { font-size:13px; color:var(--sc-text); line-height:1.55; font-style:italic; }
+  .q .qs { font-size:11px; color:var(--sc-text-dim); margin-top:5px; font-style:normal; }
+
+  .pull { font-size:14.5px !important; color:var(--sc-text) !important; line-height:1.55 !important; font-weight:600; margin-top:12px; }
+  .pull em { color:var(--sc-mint); font-style:normal; }
+
+  .metrics { width:100%; max-width:560px; margin:34px auto 0; }
+  .sect-title { font-size:11px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--sc-mint-tint-txt); }
+  .metrics-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:13px; }
+  @media (max-width:500px){ .metrics-grid { grid-template-columns:1fr; } }
+  .mcard { background:rgba(16,16,16,.72); border:1px solid var(--sc-border-soft); border-radius:var(--sc-r-md); padding:14px 16px; }
+  .mcard .mk { font-size:12.5px; font-weight:600; color:var(--sc-text); line-height:1.4; }
+  .mcard .mv { font-size:11.5px; color:var(--sc-text-dim); margin-top:6px; line-height:1.55; }
+  .mcard .mv b { color:var(--sc-mint-tint-txt); font-weight:600; }
+
+  .scope { width:100%; max-width:560px; margin:28px auto 0; border-top:1px solid var(--sc-border-soft); padding-top:18px; }
+  .scope p { font-size:11.5px; color:var(--sc-text-dim); line-height:1.7; }
+  .scope p + p { margin-top:8px; }
+  .scope b { color:var(--sc-text-muted); font-weight:600; }
+
+  /* ---- scenario picker ---- */
+  .scn-label { margin:6px 4px 10px; }
+  .scn-list { display:flex; flex-direction:column; gap:8px; margin-bottom:4px; }
+  .scn {
+    display:flex; align-items:center; gap:12px; text-align:left;
+    background:var(--sc-surface-2); border:1px solid var(--sc-border);
+    border-radius:var(--sc-r-md); padding:13px 15px; cursor:pointer; width:100%;
+    font-family:var(--sc-font); transition:border-color .15s, background .15s;
+  }
+  .scn:hover { border-color:var(--sc-surface-4); }
+  .scn.sel { border-color:var(--sc-mint); background:var(--sc-mint-ghost); }
+  .scn .scn-ico {
+    width:34px; height:34px; border-radius:50%; flex:0 0 34px;
+    background:var(--sc-surface-3); display:flex; align-items:center; justify-content:center;
+  }
+  .scn.sel .scn-ico { background:rgba(52,235,209,.16); }
+  .scn .scn-txt { flex:1; }
+  .scn .scn-t { display:block; font-size:13.5px; font-weight:600; color:var(--sc-text); }
+  .scn .scn-s { display:block; font-size:11.5px; color:var(--sc-text-muted); margin-top:2px; line-height:1.4; }
+  .scn .scn-radio {
+    width:18px; height:18px; border-radius:50%; flex:0 0 18px;
+    border:2px solid var(--sc-text-dim); display:flex; align-items:center; justify-content:center;
+  }
+  .scn.sel .scn-radio { border-color:var(--sc-mint); }
+  .scn.sel .scn-radio::after { content:""; width:9px;height:9px;border-radius:50%;background:var(--sc-mint); }
+
+  .cblock--note { border-color:rgba(52,235,209,.35); background:rgba(18,48,44,.45); }
+  .cblock--note p { color:#cfeee8; }
+</style>
+</head>
+<body>
+
+<div class="stage-head">
+  <span class="stage-eyebrow">Scalable Capital · Prototyp</span>
+  <h1>Wo ist <em>mein Geld</em>?</h1>
+  <p>Ein Status- und ETA-Tracker für jede Auszahlung. Faktischer Status, ein verständlicher Grund für jede Verzögerung, ein voraussichtliches Ankunftsdatum. Keine Anlageberatung, keine echten Zahlungen.</p>
+</div>
+
+<div class="case">
+  <div class="cblock cblock--note">
+    <div class="cnum">How this was made: full transparency</div>
+    <p>I vibecoded this prototype with AI in about three hours. My own time went into the part that actually matters: scraping ~200 recent Play-Store reviews, coding them into themes, and deliberately picking something users would <b>actually be pleased with</b>, not the most creative idea I could come up with. The thinking is mine; the AI did the typing.</p>
+  </div>
+
+  <div class="cblock">
+    <div class="cnum">01 · Motivation &amp; method</div>
+    <div class="method">
+      <span class="mpill">Scrape 197 reviews</span><span class="marrow">→</span>
+      <span class="mpill">Cluster themes</span><span class="marrow">→</span>
+      <span class="mpill">Score opportunities</span><span class="marrow">→</span>
+      <span class="mpill">Vibecode dummy</span>
+    </div>
+    <p>I scraped and coded 197 recent Play-Store reviews (Apr–Jun 2026), clustered them into themes and scored each pain on severity, frequency, and the question that actually decides a 5-hour project: <b>can product design move this, or is it an engineering problem?</b></p>
+  </div>
+
+  <div class="cblock">
+    <div class="cnum">02 · What users complained about</div>
+    <div class="chart">
+      <div class="crow"><span class="cl">App UX / Design</span><span class="ct"><div class="cbar" style="width:100%"></div></span><span class="cv">45</span></div>
+      <div class="crow"><span class="cl">Login / 2FA-Lockout</span><span class="ct"><div class="cbar" style="width:53%"></div></span><span class="cv">24</span></div>
+      <div class="crow"><span class="cl">App lädt nicht / Crash</span><span class="ct"><div class="cbar" style="width:44%"></div></span><span class="cv">20</span></div>
+      <div class="crow"><span class="cl">Scroll-Reset-Bug</span><span class="ct"><div class="cbar" style="width:29%"></div></span><span class="cv">13</span></div>
+      <div class="crow"><span class="cl">Auszahlung dauert</span><span class="ct"><div class="cbar mint" style="width:27%"></div></span><span class="cv">12</span></div>
+      <div class="crow"><span class="cl">Keine Echtzeit-Überweisung</span><span class="ct"><div class="cbar mint" style="width:16%"></div></span><span class="cv">7</span></div>
+    </div>
+    <div class="cap">Primary theme per review, n = 197. <b>Mint = money-movement cluster</b>: 19 primary, 29 mentions incl. secondary themes; with direct Trade-Republic comparisons and churn signals attached.</div>
+    <p>Honestly: the loudest themes (login, crashes) are <b>engineering reliability problems</b>, nothing a graduate fixes in a prototype. So I went for the pain where <b>design, not infrastructure, is the bottleneck</b>. After a payout is requested, the money just disappears for days. Reading the reviews, people aren't really asking for speed. They're asking for certainty.</p>
+    <div class="q">
+      <div class="qt">„Die Überweisung zurück auf das Referenzkonto dauert ewig. Bei Trade Republic innerhalb von wenigen Sekunden, hier meist zwei bis drei Tage."</div>
+      <div class="qs">1★ review · competitor comparison</div>
+    </div>
+    <div class="q">
+      <div class="qt">„Aufgrund einer SEPA-Haltefrist von bis zu 8 Wochen ist kein Zugriff möglich."</div>
+      <div class="qs">1★ review · reason discovered only after contacting support</div>
+    </div>
+  </div>
+
+  <div class="cblock">
+    <div class="cnum">03 · The idea</div>
+    <p>A <b>status &amp; ETA tracker for every payout</b>: the steps the money passes through, a plain-language reason for any delay, an estimated arrival date, and a pre-filled support handoff if the ETA slips. Factual status only: <b>no advice, no recommendations, no real payments</b>.</p>
+    <p class="pull">Scalable can't make every payout instant overnight, but it can make every payout <em>understandable immediately</em>.</p>
+  </div>
+</div>
+
+<div class="phone">
+  <!-- status bar -->
+  <div class="statusbar">
+    <span>9:41</span>
+    <span class="icons">
+      <svg width="18" height="12" viewBox="0 0 18 12" fill="none"><rect x="0" y="7" width="3" height="5" rx="1" fill="#F8F8F8"/><rect x="5" y="4" width="3" height="8" rx="1" fill="#F8F8F8"/><rect x="10" y="1.5" width="3" height="10.5" rx="1" fill="#F8F8F8"/><rect x="15" y="0" width="3" height="12" rx="1" fill="#F8F8F8" opacity=".4"/></svg>
+      <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><path d="M8 2.5c2 0 3.8.8 5.2 2.1l1.3-1.4C13 1.5 10.6.5 8 .5S3 1.5 1.5 3.2L2.8 4.6C4.2 3.3 6 2.5 8 2.5z" fill="#F8F8F8"/><path d="M8 6c1 0 2 .4 2.7 1.1l1.3-1.4C10.9 4.6 9.5 4 8 4s-2.9.6-4 1.7l1.3 1.4C6 6.4 7 6 8 6z" fill="#F8F8F8"/><circle cx="8" cy="9.5" r="1.6" fill="#F8F8F8"/></svg>
+      <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="22" height="11" rx="3" stroke="#F8F8F8" opacity=".5"/><rect x="2" y="2" width="17" height="8" rx="1.5" fill="#34EBD1"/><rect x="23.5" y="4" width="2" height="4" rx="1" fill="#F8F8F8" opacity=".5"/></svg>
+    </span>
+  </div>
+
+  <div class="screens">
+
+    <!-- ============ FRAME 1 · GELD OVERVIEW ============ -->
+    <section class="screen active" data-screen="1">
+      <div class="appbar"><span class="title">Geld</span></div>
+      <div class="scroll">
+        <div class="balance-row">
+          <div class="label-muted">Verfügbares Guthaben</div>
+          <div class="amt">3.480,00 €</div>
+        </div>
+
+        <div class="scn-label micro">Wähle eine Auszahlung (Demo-Szenarien aus echten Reviews)</div>
+        <div class="scn-list" id="scnList">
+          <button class="scn sel" data-scn="0">
+            <span class="scn-ico"><svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3 9l3 3 8-9" stroke="#34EBD1" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span class="scn-txt"><span class="scn-t">Verkauf wird abgewickelt</span><span class="scn-s">Erlöse aus einem Aktienverkauf, noch in Börsenabwicklung</span></span>
+            <span class="scn-radio"></span>
+          </button>
+          <button class="scn" data-scn="1">
+            <span class="scn-ico"><svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M8.5 1.5l-5 8h4l-1 6 6-9h-4z" stroke="#34EBD1" stroke-width="1.4" stroke-linejoin="round"/></svg></span>
+            <span class="scn-txt"><span class="scn-t">Echtzeit-Überweisung angefragt</span><span class="scn-s">Sofort angefragt, kurz zur Sicherheit geprüft</span></span>
+            <span class="scn-radio"></span>
+          </button>
+          <button class="scn" data-scn="2">
+            <span class="scn-ico"><svg width="17" height="17" viewBox="0 0 17 17" fill="none"><circle cx="8.5" cy="8.5" r="6.2" stroke="#34EBD1" stroke-width="1.4"/><path d="M8.5 5v4l2.5 1.5" stroke="#34EBD1" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+            <span class="scn-txt"><span class="scn-t">Lastschrift-Haltefrist</span><span class="scn-s">Per Lastschrift eingezahlt, mit Sicherheits-Haltefrist</span></span>
+            <span class="scn-radio"></span>
+          </button>
+        </div>
+
+        <div class="card hero">
+          <div class="hero-top">
+            <span class="pill"><span class="dot"></span>Unterwegs</span>
+            <span class="hero-clock">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="#6A6A72" stroke-width="1.5"/><path d="M9 5v4l2.5 1.5" stroke="#6A6A72" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </span>
+          </div>
+          <div class="hero-title">Auszahlung unterwegs</div>
+          <div class="hero-amt" id="heroAmt">1.250,00 €</div>
+          <div class="hero-detail">
+            An: <b>Max Mustermann</b>, DE•••• 4821<br>
+            Voraussichtliche Ankunft: <span class="hero-eta" id="heroEta">Mittwoch, 18. Juni</span>
+          </div>
+          <button class="btn btn--primary" data-go="2">Status ansehen</button>
+        </div>
+
+        <div class="section-label micro">Frühere Auszahlungen</div>
+        <div class="history">
+          <div class="row">
+            <span class="check">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-7" stroke="#34EBD1" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <div class="rtext">
+              <div class="t">Auszahlung · 1.000,00 €</div>
+              <div class="s">Angekommen am 3. Juni</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FRAME 2 · TIMELINE ============ -->
+    <section class="screen" data-screen="2">
+      <div class="appbar">
+        <button class="back" data-go="1" aria-label="Zurück">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M13 5l-6 6 6 6" stroke="#F8F8F8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <span class="title">Auszahlung</span>
+      </div>
+      <div class="scroll">
+        <div class="summary">
+          <div class="big" id="tlSummary">1.250,00 € an DE•••• 4821</div>
+          <div class="sub">Voraussichtliche Ankunft: <span class="eta" id="tlEta">Mi, 18. Juni</span></div>
+        </div>
+
+        <div class="timeline" id="timeline"></div>
+
+        <div class="timeline-foot">
+          <button class="btn btn--secondary" data-sheet="open">Warum dauert das?</button>
+          <span class="eta-exceeded-link" data-go="5b">ETA überschritten? (Demo)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FRAME 3 · SETTLEMENT ============ -->
+    <section class="screen" data-screen="3">
+      <div class="appbar">
+        <button class="back" data-go="2" aria-label="Zurück">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M13 5l-6 6 6 6" stroke="#F8F8F8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <span class="title">Abwicklung</span>
+      </div>
+      <div class="scroll">
+        <div class="info-card">
+          <span class="ico">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#34EBD1" stroke-width="1.4"/><path d="M8 7v4" stroke="#34EBD1" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="4.6" r="1" fill="#34EBD1"/></svg>
+          </span>
+          <div>
+            <div class="it" id="setTitle">Ein Teil deines Betrags stammt aus einem kürzlichen Verkauf.</div>
+            <div class="ix" id="setBody">Verkaufserlöse sind üblicherweise erst nach der Börsenabwicklung verfügbar. Das schützt dich und sorgt für eine korrekte Buchung.</div>
+          </div>
+        </div>
+
+        <div class="breakdown" id="setBreakdown">
+          <div class="brow">
+            <span class="bl">Sofort verfügbar</span>
+            <span class="br"><div class="v">450,00 €</div></span>
+          </div>
+          <div class="brow">
+            <span class="bl">Nach Abwicklung verfügbar</span>
+            <span class="br"><div class="v">800,00 €</div><div class="vs">ab Mi, 18. Juni</div></span>
+          </div>
+        </div>
+
+        <p class="reassure" id="setReassure">Sobald alles abgewickelt ist, senden wir den vollen Betrag automatisch an dein Referenzkonto. Du musst nichts weiter tun.</p>
+
+        <button class="btn btn--secondary" data-sheet="open">Mehr dazu</button>
+      </div>
+    </section>
+
+    <!-- ============ FRAME 5b · ETA EXCEEDED ============ -->
+    <section class="screen" data-screen="5b">
+      <div class="appbar">
+        <button class="back" data-go="2" aria-label="Zurück">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M13 5l-6 6 6 6" stroke="#F8F8F8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <span class="title">Auszahlung</span>
+      </div>
+      <div class="scroll">
+        <div style="display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:24px;">
+          <div class="exceeded-dot">
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="13" r="11" stroke="#DD4B43" stroke-width="1.6"/><path d="M13 7v7" stroke="#DD4B43" stroke-width="1.8" stroke-linecap="round"/><circle cx="13" cy="18" r="1.2" fill="#DD4B43"/></svg>
+          </div>
+          <h2 style="font-size:19px;font-weight:600;">Dauert länger als erwartet</h2>
+          <p style="font-size:13.5px;color:var(--sc-text-muted);margin-top:10px;line-height:1.5;max-width:280px;">Das tut uns leid. Wir prüfen das gern für dich. Deine Angaben sind bereits vorbereitet.</p>
+        </div>
+
+        <div class="support-card">
+          <div class="scl">Vorausgefüllte Angaben</div>
+          <div class="sline"><span class="k">Betrag</span><span class="v">1.250,00 €</span></div>
+          <div class="sline"><span class="k">Datum</span><span class="v">16. Juni 2026</span></div>
+          <div class="sline"><span class="k">Referenzkonto</span><span class="v">DE•••• 4821</span></div>
+          <div class="sline"><span class="k">Transaktions-ID</span><span class="v">SC-20260616-4821</span></div>
+        </div>
+
+        <div style="margin-top:22px;">
+          <button class="btn btn--primary" data-toast="Support kontaktiert · Wir melden uns innerhalb von 24 Std.">Support kontaktieren</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FRAME 5a · ARRIVED ============ -->
+    <section class="screen" data-screen="5a">
+      <div class="appbar"><span class="title">Auszahlung</span></div>
+      <div class="center-state">
+        <div class="big-check">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none"><path d="M11 20.5l6 6 12-13.5" stroke="#34EBD1" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h2>Auszahlung angekommen</h2>
+        <p class="cs-sub">1.250,00 € auf DE•••• 4821<br>am Mi, 18. Juni</p>
+        <p class="cs-thanks">Vielen Dank für dein Vertrauen.</p>
+        <button class="btn btn--secondary" data-go="1">Fertig</button>
+      </div>
+    </section>
+
+  </div><!-- /screens -->
+
+  <!-- bottom sheet (frame 4) -->
+  <div class="scrim" data-sheet="close"></div>
+  <div class="sheet" role="dialog" aria-label="Warum dauert das?">
+    <div class="grab"></div>
+    <div class="sheet-head">
+      <h2>Warum dauert das?</h2>
+      <button class="x" data-sheet="close" aria-label="Schließen">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M6 6l10 10M16 6L6 16" stroke="#A0A0A8" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <div class="reason">
+      <div class="rt"><span class="rdot"></span>Verkaufserlöse</div>
+      <div class="rx">Nach einem Verkauf werden Erlöse erst nach der Börsenabwicklung auszahlbar, in der Regel zwei Bankarbeitstage.</div>
+    </div>
+    <div class="reason">
+      <div class="rt"><span class="rdot"></span>SEPA-Überweisung</div>
+      <div class="rx">Standard-SEPA-Überweisungen an dein Referenzkonto können ein bis zwei Bankarbeitstage dauern.</div>
+    </div>
+    <div class="reason">
+      <div class="rt"><span class="rdot"></span>Einzahlungen per Lastschrift oder Instant</div>
+      <div class="rx">Aus Sicherheitsgründen können solche Beträge zeitweise nicht sofort auszahlbar sein.</div>
+    </div>
+
+    <p class="disclaimer">Diese Angaben sind allgemeine Informationen zum Ablauf, keine Anlageberatung. Die voraussichtliche Ankunft ist eine Schätzung; die genaue Gutschrift bei der Empfängerbank kann nicht garantiert werden.</p>
+
+    <button class="btn btn--primary" data-sheet="close">Verstanden</button>
+  </div>
+
+  <!-- toast -->
+  <div class="toast" id="toast"></div>
+</div>
+
+<p class="hint">Klick-Dummy · Tippe <kbd>Status ansehen</kbd> → <kbd>Mehr Details</kbd> → <kbd>Warum dauert das?</kbd>. Der Link <em>„ETA überschritten?"</em> zeigt den Support-Fall.</p>
+<div class="metrics">
+  <div class="sect-title">04 · How I'd measure it</div>
+  <div class="metrics-grid">
+    <div class="mcard">
+      <div class="mk">Payout-related support contacts</div>
+      <div class="mv">Per 1,000 payouts, A/B vs. control, target <b>−20–30 %</b> after rollout.</div>
+    </div>
+    <div class="mcard">
+      <div class="mk">„Warum dauert das?" opens</div>
+      <div class="mv">Sheet open rate per active payout, adoption &amp; self-service signal.</div>
+    </div>
+    <div class="mcard">
+      <div class="mk">Post-payout confidence</div>
+      <div class="mv">1-tap in-app survey after arrival, target <b>+0.5 on a 5-point scale</b>.</div>
+    </div>
+    <div class="mcard">
+      <div class="mk">Negative-review share</div>
+      <div class="mv">Reviews citing „Echtzeit", „Referenzkonto" or a competitor, trending <b>down</b> over two quarters.</div>
+    </div>
+  </div>
+</div>
+
+<div class="scope">
+  <p><b>Scope &amp; honesty:</b> all data is fake; no backend, no auth, no live prices, no real payments, no investment advice. The ETA is shown as an estimate; the exact credit at the receiving bank can't be guaranteed. This is phase 1 (transparency now); faster outbound payouts are the phase-2 engineering track.</p>
+  <p><b>Time spent (&lt; 5 h):</b> scraping &amp; coding ~200 reviews 1:15 · picking &amp; scoping the idea 0:30 · vibecoding prototype &amp; deck with AI 3:00, <b>≈ 4:45 total</b>.</p>
+</div>
+
+<script>
+  const phone = document.querySelector('.phone');
+  const screens = [...phone.querySelectorAll('.screen')];
+  const scrim = phone.querySelector('.scrim');
+  const sheet = phone.querySelector('.sheet');
+  const toastEl = document.getElementById('toast');
+  let toastTimer;
+
+  // ---- scenario data model: each drives a different timeline, reason & breakdown ----
+  const DONE_SVG = '<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2.5 7l3 3 5.5-6.5" stroke="#042521" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const SCN = [
+    { // 0 · sale settling
+      amt:"1.250,00 €", eta:"Mi, 18. Juni", etaLong:"Mittwoch, 18. Juni",
+      steps:[
+        {s:"done", t:"Auszahlung angefragt", sub:"Mo, 16. Juni · 14:32"},
+        {s:"done", t:"Guthaben geprüft"},
+        {s:"active", t:"Verkaufserlöse werden abgewickelt", sub:"Voraussichtlich verfügbar ab Mi, 18. Juni", more:true},
+        {s:"pending", t:"An Referenzkonto gesendet"},
+        {s:"pending", t:"Voraussichtliche Ankunft", sub:"Mi, 18. Juni"},
+      ],
+      setTitle:"Ein Teil deines Betrags stammt aus einem kürzlichen Verkauf.",
+      setBody:"Verkaufserlöse sind üblicherweise erst nach der Börsenabwicklung verfügbar. Das schützt dich und sorgt für eine korrekte Buchung.",
+      breakdown:[["Sofort verfügbar","450,00 €",null],["Nach Abwicklung verfügbar","800,00 €","ab Mi, 18. Juni"]],
+      reassure:"Sobald alles abgewickelt ist, senden wir den vollen Betrag automatisch an dein Referenzkonto. Du musst nichts weiter tun.",
+    },
+    { // 1 · instant transfer, brief security check
+      amt:"600,00 €", eta:"heute, ~15 Min.", etaLong:"heute, in etwa 15 Minuten",
+      steps:[
+        {s:"done", t:"Echtzeit-Überweisung angefragt", sub:"Heute · 09:12"},
+        {s:"done", t:"Guthaben geprüft"},
+        {s:"active", t:"Kurze Sicherheitsprüfung", sub:"Üblicherweise wenige Minuten", more:true},
+        {s:"pending", t:"An Referenzkonto gesendet"},
+        {s:"pending", t:"Voraussichtliche Ankunft", sub:"heute, ~15 Min."},
+      ],
+      setTitle:"Deine Echtzeit-Überweisung wird kurz geprüft.",
+      setBody:"Zu deiner Sicherheit prüfen wir Echtzeit-Überweisungen vor dem Versand. Das dauert in der Regel nur wenige Minuten, danach ist das Geld meist sofort da.",
+      breakdown:[["Sofort verfügbar","600,00 €",null]],
+      reassure:"Nach der Prüfung senden wir den Betrag als Echtzeit-Überweisung. Die Gutschrift erfolgt dann normalerweise innerhalb von Sekunden.",
+    },
+    { // 2 · direct-debit holding period
+      amt:"2.000,00 €", eta:"Mo, 30. Juni", etaLong:"Montag, 30. Juni",
+      steps:[
+        {s:"done", t:"Auszahlung angefragt", sub:"Mo, 16. Juni · 11:05"},
+        {s:"done", t:"Guthaben geprüft"},
+        {s:"active", t:"Lastschrift-Haltefrist läuft", sub:"Auszahlbar ab Mo, 30. Juni", more:true},
+        {s:"pending", t:"An Referenzkonto gesendet"},
+        {s:"pending", t:"Voraussichtliche Ankunft", sub:"Mo, 30. Juni"},
+      ],
+      setTitle:"Ein Teil stammt aus einer Einzahlung per Lastschrift.",
+      setBody:"Per Lastschrift eingezahlte Beträge unterliegen aus Sicherheitsgründen einer Haltefrist, bevor sie ausgezahlt werden können. So sind alle Buchungen abgesichert.",
+      breakdown:[["Sofort verfügbar","500,00 €",null],["Nach Haltefrist verfügbar","1.500,00 €","ab Mo, 30. Juni"]],
+      reassure:"Sobald die Haltefrist endet, senden wir den vollen Betrag automatisch an dein Referenzkonto. Du musst nichts weiter tun.",
+    },
+  ];
+  let curScn = 0;
+
+  function renderScenario(i){
+    const d = SCN[i]; curScn = i;
+    // overview hero
+    document.getElementById('heroAmt').textContent = d.amt;
+    document.getElementById('heroEta').textContent = d.etaLong;
+    // timeline summary
+    document.getElementById('tlSummary').textContent = d.amt + " an DE•••• 4821";
+    document.getElementById('tlEta').textContent = d.eta;
+    // timeline steps
+    const tl = document.getElementById('timeline');
+    tl.innerHTML = d.steps.map((st,idx)=>{
+      const last = idx===d.steps.length-1;
+      let node, conn = last ? "" : `<div class="connector ${st.s==='done'?'done':'pending'}"></div>`;
+      if(st.s==='done') node = `<div class="tnode done">${DONE_SVG}</div>`;
+      else if(st.s==='active') node = `<div class="tnode active"><div class="inner"></div></div>`;
+      else node = `<div class="tnode pending"></div>`;
+      const ttCls = st.s==='active' ? 'tt is-active' : st.s==='pending' ? 'tt is-pending' : 'tt';
+      const subCls = st.s==='active' ? 'tsub mint' : 'tsub';
+      const sub = st.sub ? `<div class="${subCls}">${st.sub}</div>` : "";
+      const more = st.more ? `<span class="more" data-go="3">Mehr Details ›</span>` : "";
+      return `<div class="tstep"><div class="gutter">${node}${conn}</div><div class="tbody"><div class="${ttCls}">${st.t}</div>${sub}${more}</div></div>`;
+    }).join("");
+    // settlement
+    document.getElementById('setTitle').textContent = d.setTitle;
+    document.getElementById('setBody').textContent = d.setBody;
+    document.getElementById('setReassure').textContent = d.reassure;
+    document.getElementById('setBreakdown').innerHTML = d.breakdown.map(b=>{
+      const vs = b[2] ? `<div class="vs">${b[2]}</div>` : "";
+      return `<div class="brow"><span class="bl">${b[0]}</span><span class="br"><div class="v">${b[1]}</div>${vs}</span></div>`;
+    }).join("");
+    // picker selection state
+    document.querySelectorAll('.scn').forEach(el=>el.classList.toggle('sel', +el.dataset.scn===i));
+  }
+  renderScenario(0);
+
+  function show(id){
+    const current = phone.querySelector('.screen.active');
+    const next = phone.querySelector(`.screen[data-screen="${id}"]`);
+    if(!next || next===current) return;
+    if(current){ current.classList.add('exit-left'); current.classList.remove('active'); }
+    // reset scroll on the incoming frame
+    const sc = next.querySelector('.scroll'); if(sc) sc.scrollTop = 0;
+    requestAnimationFrame(()=>{
+      next.classList.remove('exit-left');
+      next.classList.add('active');
+    });
+    setTimeout(()=>{ screens.forEach(s=>{ if(s!==next) s.classList.remove('exit-left'); }); }, 300);
+  }
+  function openSheet(){ scrim.classList.add('show'); sheet.classList.add('show'); }
+  function closeSheet(){ scrim.classList.remove('show'); sheet.classList.remove('show'); }
+  function toast(msg){
+    toastEl.textContent = msg; toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=>toastEl.classList.remove('show'), 2600);
+  }
+
+  phone.addEventListener('click', (e)=>{
+    const scn = e.target.closest('[data-scn]');
+    const go = e.target.closest('[data-go]');
+    const sh = e.target.closest('[data-sheet]');
+    const tt = e.target.closest('[data-toast]');
+    if(scn){ renderScenario(+scn.dataset.scn); return; }
+    if(go){ show(go.dataset.go); }
+    else if(sh){ sh.dataset.sheet==='open' ? openSheet() : closeSheet(); }
+    if(tt){ toast(tt.dataset.toast); }
+  });
+
+  // keyboard: Esc closes sheet
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeSheet(); });
+</script>
+</body>
+</html>
